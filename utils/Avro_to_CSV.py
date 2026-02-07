@@ -62,7 +62,7 @@ class AvroProcessor:
 
     def organize_by_subject(self, mapping):
         """Moves CSVs into TARIS folders and then into Raga/Breathing/Control groups."""
-        # Step 1: Segregate by TARIS ID
+        # Step 1: Segregate by TARIS ID (Keep this as is)
         for file_name in os.listdir(self.output_csv_dir):
             match = re.search(r'TARIS\d+', file_name)
             if match:
@@ -71,11 +71,17 @@ class AvroProcessor:
                 os.makedirs(dest_dir, exist_ok=True)
                 shutil.move(os.path.join(self.output_csv_dir, file_name), os.path.join(dest_dir, file_name))
 
-        # Step 2: Group by Activity
+        # Step 2: Group by Activity (FIXED)
         for group, subjects in mapping.items():
             group_path = os.path.join(self.organized_dir, group)
             os.makedirs(group_path, exist_ok=True)
             for subject in subjects:
-                subject_path = os.path.join(self.organized_dir, subject)
-                if os.path.exists(subject_path):
-                    shutil.move(subject_path, os.path.join(group_path, subject))
+                # This is the path to the folder created in Step 1 (e.g., organized_data/TARIS12)
+                subject_current_path = os.path.join(self.organized_dir, subject)
+                
+                # Check if it exists and hasn't already been moved
+                if os.path.exists(subject_current_path):
+                    print(f"Moving {subject} to {group} group...")
+                    # Moving the whole subject folder into the group folder
+                    # Result: organized_data/Raga/TARIS12/files.csv
+                    shutil.move(subject_current_path, group_path)

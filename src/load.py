@@ -3,17 +3,29 @@ from pydrive2.auth import GoogleAuth
 from pydrive2.drive import GoogleDrive
 
 class GDriveUploader:
-    def __init__(self, service_json_path='client_secrets.json'):
+    def __init__(self):
+        # 1. Use AIRFLOW_HOME if set, otherwise fallback to current dir
+        project_root = os.getenv('AIRFLOW_HOME', os.getcwd())
+        secrets_path = os.path.join(project_root, 'client_secrets.json')
+        creds_path = os.path.join(project_root, 'mycreds.txt')
+
         gauth = GoogleAuth()
-        gauth.settings['client_config_backend'] = 'service'
-        gauth.settings['service_config'] = {
-            'client_json_file_path': service_json_path,
-        }
-        gauth.ServiceAuth()
+        gauth.settings['client_config_file'] = secrets_path
+
+        # 2. SILENT LOAD: This part runs inside Airflow
+        if os.path.exists(creds_path):
+            gauth.LoadCredentialsFile(creds_path)
+        else:
+            raise FileNotFoundError(f"Missing 'mycreds.txt' at {creds_path}. Run this script manually first!")
+
+        if gauth.access_token_expired:
+            gauth.Refresh()
+        else:
+            gauth.Authorize()
+            
         self.drive = GoogleDrive(gauth)
 
     def get_or_create_folder(self, folder_name, parent_id):
-        """Checks if a folder exists; if not, creates it."""
         query = (f"title = '{folder_name}' and '{parent_id}' in parents "
                  f"and mimeType = 'application/vnd.google-apps.folder' and trashed = false")
         file_list = self.drive.ListFile({'q': query}).GetList()
@@ -31,8 +43,6 @@ class GDriveUploader:
             return folder['id']
 
     def upload_recursive(self, local_path, parent_id):
-        """Uploads files and creates subdirectories in Google Drive."""
-        # Optimization: Fetch all files in the current Drive folder once
         query = f"'{parent_id}' in parents and trashed = false"
         existing_items = {f['title']: f['id'] for f in self.drive.ListFile({'q': query}).GetList()}
 
@@ -40,11 +50,9 @@ class GDriveUploader:
             local_item_path = os.path.join(local_path, item)
             
             if os.path.isdir(local_item_path):
-                # If folder exists, get ID; otherwise create it
                 subfolder_id = self.get_or_create_folder(item, parent_id)
                 self.upload_recursive(local_item_path, subfolder_id)
             else:
-                # Check against our local cache of existing files
                 if item not in existing_items:
                     print(f"Uploading: {item}")
                     gfile = self.drive.CreateFile({'title': item, 'parents': [{'id': parent_id}]})
@@ -54,25 +62,58 @@ class GDriveUploader:
                     print(f"Skipping (exists): {item}")
 
 def upload_to_gdrive():
-    """
-    Orchestrates the upload of the three specific ETL output directories.
-    Note: Replace the strings below with the actual Folder IDs from your browser URL.
-    """
-    # These IDs are found in the URL: drive.google.com/drive/folders/YOUR_ID_HERE
+    project_root = os.getenv('AIRFLOW_HOME', os.getcwd())
+    
+    # Define your folders using the IDs (not URLs) from your previous steps
     TARGET_DRIVE_IDS = {
-        "etl/raw": "FOLDER_ID_FOR_PARTICIPANT_DATA_RAW",
-        "etl/organized_data": "FOLDER_ID_FOR_PARTICIPANT_DATA_ORGANIZED",
-        "etl/phase_segmented": "FOLDER_ID_FOR_PARTICIPANT_DATA_PHASE_SEGMENTED"
+        os.path.join(project_root, "etl/organized_data"): "1XPvuLIMOa4H3eXcFnwEIBu8-pkwuovCs",
+        os.path.join(project_root, "etl/phase_segmented"): "1x-Jx1CL2wm9gmHo3IalkpgeCfRV-t4bx"
     }
 
-    # Ensure you have the client_secrets.json in your project root or provide the full path
-    uploader = GDriveUploader(service_json_path='client_secrets.json')
+    uploader = GDriveUploader()
     
     for local_path, drive_id in TARGET_DRIVE_IDS.items():
         if os.path.exists(local_path):
-            print(f"\n--- Syncing {local_path} to Drive ID: {drive_id} ---")
+            print(f"\n--- Syncing {local_path} ---")
             uploader.upload_recursive(local_path, drive_id)
-        else:
-            print(f"Warning: Local path {local_path} not found. Skipping.")
 
     print("\n--- Google Drive Sync Completed Successfully ---")
+
+
+
+# ==========================================
+# THE MANUAL SETUP BLOCK
+# ==========================================
+# ==========================================
+# THE MANUAL SETUP BLOCK (Run this in your terminal)
+# ==========================================
+# ==========================================
+# THE MANUAL SETUP BLOCK (Run this in your terminal)
+# ==========================================
+if __name__ == "__main__":
+    project_root = os.getcwd() 
+    secrets_path = os.path.join(project_root, 'client_secrets.json')
+    creds_path = os.path.join(project_root, 'mycreds.txt')
+
+    gauth = GoogleAuth()
+    
+    # 1. Set the client secrets path directly
+    gauth.settings['client_config_file'] = secrets_path
+    gauth.settings['client_config_backend'] = 'file'
+
+    # 2. Check for the file and run the handshake
+    if not os.path.exists(creds_path):
+        print(f"\n--- INITIAL SETUP: STARTING HANDSHAKE ---")
+        # BYPASS: Use LocalWebserverAuth if CommandLineAuth keeps looping on config
+        # If you are on your local machine, this is actually more reliable
+        try:
+            gauth.LocalWebserverAuth() 
+        except Exception:
+            # Fallback to Command Line if browser fails
+            gauth.CommandLineAuth()
+            
+        # 3. Save explicitly to the path
+        gauth.SaveCredentialsFile(creds_path)
+        print(f"\nSUCCESS: Credentials saved to {creds_path}")
+    else:
+        print(f"✅ Credentials already exist at {creds_path}.")

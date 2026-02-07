@@ -9,3 +9,4 @@ webserver_config.py
 logs/
 *.pid
 scheduler.log
+mycreds.txt
