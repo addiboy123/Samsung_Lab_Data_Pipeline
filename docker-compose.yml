@@ -1,0 +1,22 @@
+version: "3.8"
+
+services:
+  airflow:
+    build: .
+    container_name: airflow_etl
+    env_file:
+      - .env
+    volumes:
+    - ./dags:/opt/airflow/dags
+    - ./scripts:/opt/airflow/scripts
+    - ./logs:/opt/airflow/logs
+    - ./airflow_db:/opt/airflow/airflow.db
+    - ./tmp:/tmp
+
+    ports:
+      - "8080:8080"
+    command: airflow standalone
+
+volumes:
+  airflow_logs:
+  airflow_db:

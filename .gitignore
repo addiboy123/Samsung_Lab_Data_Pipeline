@@ -1,0 +1,11 @@
+.env
+.venv
+__pycache__/
+etl/
+client_secrets.json
+airflow.db
+airflow.cfg
+webserver_config.py
+logs/
+*.pid
+scheduler.log
