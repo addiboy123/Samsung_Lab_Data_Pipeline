@@ -2,7 +2,6 @@ import os
 import re
 import shutil
 import csv
-import json
 from avro.datafile import DataFileReader
 from avro.io import DatumReader
 
@@ -36,15 +35,20 @@ class AvroProcessor:
         for root, _, files in os.walk(self.raw_base_dir):
             for file in files:
                 if file.endswith(".avro"):
-                    self._convert_single_file(os.path.join(root, file))
+                    self._convert_and_append_file(os.path.join(root, file))
 
-    def _convert_single_file(self, file_path):
+    def _convert_and_append_file(self, file_path):
+        """Extracts data and appends it to a single participant CSV."""
         try:
             with open(file_path, "rb") as f:
                 reader = DataFileReader(f, DatumReader())
                 data = next(reader)
                 
-                base_name = os.path.basename(file_path)
+                # Use regex to get the ID (e.g., TARIS12) from 'TARIS12_1.avro' or 'TARIS12.avro'
+                base_file_name = os.path.basename(file_path)
+                match = re.search(r'TARIS\d+', base_file_name)
+                participant_id = match.group() if match else base_file_name.split('_')[0].split('.')[0]
+
                 for signal in ["eda", "bvp"]:
                     sig_data = data["rawData"][signal]
                     timestamps = [
@@ -52,17 +56,22 @@ class AvroProcessor:
                         for i in range(len(sig_data["values"]))
                     ]
                     
-                    out_file = os.path.join(self.output_csv_dir, f"{signal}_{base_name}.csv")
-                    with open(out_file, 'w', newline='') as f_out:
+                    # File naming: e.g., eda_TARIS12.csv (regardless of which chunk this is)
+                    out_file = os.path.join(self.output_csv_dir, f"{signal}_{participant_id}.csv")
+                    
+                    # 'a' mode appends. If it's the first time, write the header.
+                    file_exists = os.path.isfile(out_file)
+                    with open(out_file, 'a', newline='') as f_out:
                         writer = csv.writer(f_out)
-                        writer.writerow(["unix_timestamp", signal])
+                        if not file_exists:
+                            writer.writerow(["unix_timestamp", signal])
                         writer.writerows(zip(timestamps, sig_data["values"]))
         except Exception as e:
             print(f"Error processing {file_path}: {e}")
 
     def organize_by_subject(self, mapping):
-        """Moves CSVs into TARIS folders and then into Raga/Breathing/Control groups."""
-        # Step 1: Segregate by TARIS ID (Keep this as is)
+        """Moves CSVs into TARIS folders and then into Activity groups."""
+        # Step 1: Segregate by TARIS ID
         for file_name in os.listdir(self.output_csv_dir):
             match = re.search(r'TARIS\d+', file_name)
             if match:
@@ -71,17 +80,11 @@ class AvroProcessor:
                 os.makedirs(dest_dir, exist_ok=True)
                 shutil.move(os.path.join(self.output_csv_dir, file_name), os.path.join(dest_dir, file_name))
 
-        # Step 2: Group by Activity (FIXED)
+        # Step 2: Group by Activity
         for group, subjects in mapping.items():
             group_path = os.path.join(self.organized_dir, group)
             os.makedirs(group_path, exist_ok=True)
             for subject in subjects:
-                # This is the path to the folder created in Step 1 (e.g., organized_data/TARIS12)
                 subject_current_path = os.path.join(self.organized_dir, subject)
-                
-                # Check if it exists and hasn't already been moved
                 if os.path.exists(subject_current_path):
-                    print(f"Moving {subject} to {group} group...")
-                    # Moving the whole subject folder into the group folder
-                    # Result: organized_data/Raga/TARIS12/files.csv
                     shutil.move(subject_current_path, group_path)

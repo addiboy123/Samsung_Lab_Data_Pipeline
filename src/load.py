@@ -66,8 +66,8 @@ def upload_to_gdrive():
     
     # Define your folders using the IDs (not URLs) from your previous steps
     TARGET_DRIVE_IDS = {
-        os.path.join(project_root, "etl/organized_data"): "1XPvuLIMOa4H3eXcFnwEIBu8-pkwuovCs",
-        os.path.join(project_root, "etl/phase_segmented"): "1x-Jx1CL2wm9gmHo3IalkpgeCfRV-t4bx"
+        os.path.join(project_root, "etl/organized_data"): "1eNLj2mImpRbZhbCpwW2A_L9xVVcY_wuw",
+        os.path.join(project_root, "etl/phase_segmented"): "12B0c6yaGuABtpXX4ezFU9EcxPKmo1pqF"
     }
 
     uploader = GDriveUploader()
@@ -84,12 +84,7 @@ def upload_to_gdrive():
 # ==========================================
 # THE MANUAL SETUP BLOCK
 # ==========================================
-# ==========================================
-# THE MANUAL SETUP BLOCK (Run this in your terminal)
-# ==========================================
-# ==========================================
-# THE MANUAL SETUP BLOCK (Run this in your terminal)
-# ==========================================
+
 if __name__ == "__main__":
     project_root = os.getcwd() 
     secrets_path = os.path.join(project_root, 'client_secrets.json')
