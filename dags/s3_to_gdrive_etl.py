@@ -7,6 +7,8 @@ from dotenv import load_dotenv
 
 # Import your custom logic
 from src.transform import transform_data
+from src.feature_extraction import main as run_feature_extraction
+from src.error_plotting import main as run_error_plotting
 from src.load import upload_to_gdrive
 
 # 1. Load the .env file
@@ -54,9 +56,19 @@ with DAG(
         python_callable=transform_data
     )
 
+    feature_extraction_task = PythonOperator(
+        task_id="feature_extraction",
+        python_callable=run_feature_extraction
+    )
+
+    error_plotting_task = PythonOperator(
+        task_id="error_plotting",
+        python_callable=run_error_plotting
+    )
+
     load_task = PythonOperator(
         task_id="upload_to_gdrive",
         python_callable=upload_to_gdrive
     )
 
-    extract_from_s3 >> transform_task >> load_task
+    extract_from_s3 >> transform_task >> feature_extraction_task >> error_plotting_task >> load_task
