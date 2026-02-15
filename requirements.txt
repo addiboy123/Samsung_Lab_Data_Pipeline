@@ -153,3 +153,7 @@ wrapt==2.1.1
 WTForms==3.2.1
 yarl==1.22.0
 zipp==3.23.0
+# EEG feature extraction and plotting
+antropy>=0.1.6
+scipy>=1.11.0
+matplotlib>=3.7.0
