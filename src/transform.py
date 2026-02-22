@@ -8,7 +8,7 @@ from datetime import datetime
 
 def transform_data():
     # --- Configuration ---
-    START_DATE = "2026-02-16"
+    START_DATE = "2026-01-14"
     END_DATE = "2026-02-18"
     
     # Dynamically get the project root path
@@ -89,7 +89,7 @@ def transform_data():
     print(f"\nStarting Feature Extraction (output dir: {FEATURES_DIR})...")
     os.makedirs(FEATURES_DIR, exist_ok=True)
     features_path = run_feature_extraction(
-        base_path=SEGMENTED_DIR,
+        root_dir=SEGMENTED_DIR,
         output_path=FEATURES_CSV
     )
     
