@@ -1,7 +1,6 @@
 """
-Plot extracted features by Phase and Group (mean ± std errorbar plots).
+Plot extracted features by Phase and Group (bar plots with mean ± std).
 Reads from pipeline features CSV and saves plots under etl/plots.
-Only the bar/errorbar plotting logic; no other processing.
 """
 import os
 import pandas as pd
@@ -27,7 +26,7 @@ def get_paths():
 
 
 def run_error_plotting(features_csv_path=None, plots_dir=None):
-    """Load features CSV and create errorbar plots per feature (bar plots only)."""
+    """Load features CSV and create bar plots per feature (one fig per feature, one subplot per group)."""
     default_csv, default_plots = get_paths()
     features_csv_path = features_csv_path or default_csv
     plots_dir = plots_dir or default_plots
@@ -40,7 +39,7 @@ def run_error_plotting(features_csv_path=None, plots_dir=None):
     df = pd.read_csv(features_csv_path)
     df.drop(columns=['SubjectID'], inplace=True, errors='ignore')
 
-    # Use 'Intervention' from feature_extraction output; fallback to 'group'
+    # Support both 'Intervention' (feature_extraction output) and 'group'
     group_col = 'Intervention' if 'Intervention' in df.columns else 'group'
     if group_col not in df.columns:
         print("No group/Intervention column in CSV.")
@@ -48,72 +47,51 @@ def run_error_plotting(features_csv_path=None, plots_dir=None):
 
     groups = ['Control', 'Raga', 'Breathing']
     all_phases = ['baseline', 'intervention', 'test']
-    feature_columns = [c for c in df.columns if c not in [group_col, 'Phase']]
-    group_colors = {
-        'Control': 'blue',
-        'Raga': 'green',
-        'Breathing': 'orange'
-    }
-    phase_to_x = {p: i for i, p in enumerate(all_phases)}
+    feature_columns = [col for col in df.columns if col not in [group_col, 'Phase']]
 
-    # Global Y-limits per feature
+    # Get global y-limits for each feature
     y_limits = {}
     for feature in feature_columns:
-        all_values = []
+        all_values = pd.Series(dtype='float64')
         for group in groups:
-            subset = df[df[group_col] == group].copy()
-            if subset.empty:
-                continue
-            subset[feature] = subset.groupby('Phase')[feature].transform(cap_outliers_iqr)
-            all_values.append(subset[feature])
-        if all_values:
-            combined = pd.concat(all_values)
-            if len(combined) > 0 and np.ptp(combined) > 0:
-                pad = 0.1 * np.ptp(combined)
-                y_limits[feature] = (combined.min() - pad, combined.max() + pad)
-            else:
-                y_limits[feature] = (0, 1)
+            phases = all_phases if group != 'Control' else ['baseline', 'test']
+            subset = df[(df[group_col] == group) & (df['Phase'].isin(phases))].copy()
+            if not subset.empty:
+                capped = subset.groupby('Phase')[feature].transform(cap_outliers_iqr)
+                all_values = pd.concat([all_values, capped])
+        if len(all_values) > 0 and np.ptp(all_values) > 0:
+            y_min = all_values.min() - 0.1 * np.ptp(all_values)
+            y_max = all_values.max() + 0.1 * np.ptp(all_values)
+            y_limits[feature] = (y_min, y_max)
         else:
             y_limits[feature] = (0, 1)
 
-    # Plot each feature (bar/errorbar plots only)
+    # Generate plots
     for feature in feature_columns:
-        plt.figure(figsize=(10, 6))
-        plt.title(f'Feature: {feature}', fontsize=16)
+        fig, axs = plt.subplots(1, len(groups), figsize=(18, 5), sharey=True)
+        fig.suptitle(f'Feature: {feature}', y=1.02, fontsize=16)
 
-        for group in groups:
-            subset = df[df[group_col] == group].copy()
-            if subset.empty:
-                continue
+        if len(groups) == 1:
+            axs = [axs]
+
+        for idx, group in enumerate(groups):
+            phases = all_phases if group != 'Control' else ['baseline', 'test']
+            subset = df[(df[group_col] == group) & (df['Phase'].isin(phases))].copy()
             subset[feature] = subset.groupby('Phase')[feature].transform(cap_outliers_iqr)
-            means = subset.groupby('Phase')[feature].mean()
-            stds = subset.groupby('Phase')[feature].std()
 
-            if group == 'Control':
-                phases = ['baseline', 'test']
-            else:
-                phases = ['baseline', 'intervention', 'test']
+            means = subset.groupby('Phase')[feature].mean().reindex(phases)
+            stds = subset.groupby('Phase')[feature].std().reindex(phases)
+            x = np.arange(len(phases))
 
-            x = [phase_to_x[p] for p in phases]
-            y_mean = [means[p] for p in phases]
-            y_std = [stds[p] for p in phases]
+            axs[idx].bar(x, means, yerr=stds, capsize=8, color='gray',
+                         edgecolor='black', alpha=0.85)
+            axs[idx].plot(x, means.values, color='red', linestyle='--', marker='o')
+            axs[idx].set_xticks(x)
+            axs[idx].set_xticklabels(phases)
+            axs[idx].set_title(group, fontsize=12)
+            axs[idx].grid(axis='y', linestyle='--', alpha=0.6)
+            axs[idx].set_ylim(y_limits[feature])
 
-            plt.errorbar(
-                x,
-                y_mean,
-                yerr=y_std,
-                fmt='-o',
-                capsize=6,
-                label=group,
-                color=group_colors[group]
-            )
-
-        plt.xticks(list(phase_to_x.values()), all_phases)
-        plt.ylim(y_limits.get(feature, (0, 1)))
-        plt.xlabel('Phase')
-        plt.ylabel('Value')
-        plt.grid(axis='y', linestyle='--', alpha=0.6)
-        plt.legend(title='Group')
         plt.tight_layout()
         safe_name = feature.replace(" ", "_").replace("/", "_")
         out_path = os.path.join(plots_dir, f"feature_{safe_name}.png")
