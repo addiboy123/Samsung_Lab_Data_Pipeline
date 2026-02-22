@@ -38,7 +38,7 @@ def transform_data():
     # 4. Features and plots directories with dated subdirectories
     FEATURES_DIR    = os.path.join(BASE_ETL_PATH, "features_extracted", today_date)
     PLOTS_DIR       = os.path.join(BASE_ETL_PATH, "plots", today_date)
-    FEATURES_CSV    = os.path.join(FEATURES_DIR, "eeg_features_output.csv")
+    FEATURES_CSV    = os.path.join(FEATURES_DIR, "eda_bvp_features_output.csv")
 
     # Log the paths to the Airflow UI so you can verify them in the logs
     print(f"Project Root: {project_root}")

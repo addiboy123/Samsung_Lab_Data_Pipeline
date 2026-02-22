@@ -116,6 +116,9 @@ def extract_features(folder_path, subject_id, control_subjects, breathing_subjec
         intervention = 'Unknown'
 
     print("Processing : " + subject_id)
+    
+    # Group files by condition
+    conditions_data = {}
     for filename in os.listdir(folder_path):
         if filename.endswith('.csv') and (filename.startswith('eda_') or filename.startswith('bvp_')):
             file_path = os.path.join(folder_path, filename)
@@ -130,19 +133,28 @@ def extract_features(folder_path, subject_id, control_subjects, breathing_subjec
                 condition = 'rest'
 
             if condition is not None:
+                if condition not in conditions_data:
+                    conditions_data[condition] = {'eda': None, 'bvp': None}
+                
                 df = pd.read_csv(file_path)
-                row = [subject_id] + [np.nan] * len(features) + [condition] + [intervention]
-
                 if filename.startswith('eda_'):
-                    eda_signal = df['eda'].values
-                    eda_features_values = extract_eda_features(eda_signal)
-                    row[1:eda_features_length] = eda_features_values
+                    conditions_data[condition]['eda'] = df['eda'].values
                 elif filename.startswith('bvp_'):
-                    bvp_signal = df['bvp'].values
-                    bvp_features_values = extract_bvp_features(bvp_signal)
-                    row[eda_features_length:bvp_features_length] = bvp_features_values
-
-                features_df.loc[len(features_df)] = row.copy()
+                    conditions_data[condition]['bvp'] = df['bvp'].values
+    
+    # Create one row per condition with both EDA and BVP features
+    for condition, signals in conditions_data.items():
+        row = [subject_id] + [np.nan] * len(features) + [condition] + [intervention]
+        
+        if signals['eda'] is not None:
+            eda_features_values = extract_eda_features(signals['eda'])
+            row[1:eda_features_length] = eda_features_values
+        
+        if signals['bvp'] is not None:
+            bvp_features_values = extract_bvp_features(signals['bvp'])
+            row[eda_features_length:bvp_features_length] = bvp_features_values
+        
+        features_df.loc[len(features_df)] = row.copy()
 
 
 def run_feature_extraction(root_dir=None, output_path=None):

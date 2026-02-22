@@ -73,8 +73,8 @@ def upload_to_gdrive():
     TARGET_DRIVE_IDS = {
         os.path.join(project_root, "etl/organized_data"): "1eNLj2mImpRbZhbCpwW2A_L9xVVcY_wuw",
         os.path.join(project_root, "etl/phase_segmented"): "12B0c6yaGuABtpXX4ezFU9EcxPKmo1pqF",
-        os.path.join(project_root, "etl/features_extracted", today_date): "1nRegir8GcKg_LwCld0irH2pkUhqzLiuF",  # Replace with actual ID
-        os.path.join(project_root, "etl/plots", today_date): "1lEXM0I5A5GWrwEhbDG-2YPZMOcqcLIkL"  # Replace with actual ID
+        os.path.join(project_root, "etl/features_extracted"): "1nRegir8GcKg_LwCld0irH2pkUhqzLiuF",  # Replace with actual ID
+        os.path.join(project_root, "etl/plots"): "1lEXM0I5A5GWrwEhbDG-2YPZMOcqcLIkL"  # Replace with actual ID
     }
 
     uploader = GDriveUploader()
