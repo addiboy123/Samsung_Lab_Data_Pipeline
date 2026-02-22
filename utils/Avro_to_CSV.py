@@ -87,4 +87,8 @@ class AvroProcessor:
             for subject in subjects:
                 subject_current_path = os.path.join(self.organized_dir, subject)
                 if os.path.exists(subject_current_path):
-                    shutil.move(subject_current_path, group_path)
+                    dest_path = os.path.join(group_path, subject)
+                    # Remove if already exists and then move
+                    if os.path.exists(dest_path):
+                        shutil.rmtree(dest_path)
+                    shutil.move(subject_current_path, dest_path)

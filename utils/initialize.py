@@ -15,11 +15,11 @@ class ETLInitializer:
         self._metadata_df = df
 
     def get_group_mapping(self):
-        """Dynamically maps TARIS<ID> to its Group."""
+        """Dynamically maps Participant ID to Group."""
         mapping = {}
         for _, row in self._metadata_df.iterrows():
             group = str(row['Group']).strip()
-            # User requirement: rename as 'Taris<(Participant ID)>'
+            # User requirement: rename as 'TARIS<(Participant ID)>'
             part_id = f"TARIS{str(row['Participant ID']).strip().zfill(2)}"
             
             if group not in mapping:
@@ -66,6 +66,8 @@ class ETLInitializer:
                                 if f.startswith(emp_id) and os.path.isdir(os.path.join(source_dir, f))]
                 
                 for folder in found_folders:
+                    # Map (Empatica_ID, Date) to Participant_ID and rename folder
+                    # Safe because date folder structure prevents collisions
                     dest_name = f"TARIS{part_suffix}"
                     dest_path = os.path.join(self.raw_output_dir, date_folder, dest_name)
                     

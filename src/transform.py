@@ -5,8 +5,8 @@ import os
 
 def transform_data():
     # --- Configuration ---
-    START_DATE = "2026-02-09"
-    END_DATE = "2026-02-12"
+    START_DATE = "2026-02-05"
+    END_DATE = "2026-02-18"
     
     # Dynamically get the project root path
     # Defaults to current directory if AIRFLOW_HOME is somehow not set
