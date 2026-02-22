@@ -1,227 +1,202 @@
 """
-EEG feature extraction from phase-segmented CSV files.
+EDA and BVP feature extraction from phase-segmented CSV files.
 Reads from the pipeline's phase_segmented output and writes to etl/features_extracted.
 """
 import os
-import glob
 import pandas as pd
 import numpy as np
-import antropy as ant
-from scipy import signal
-from warnings import simplefilter
+import warnings
 
-# Suppress FutureWarning from pandas
-simplefilter(action="ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=RuntimeWarning)
 
+import neurokit2 as nk
 
-# -----------------------------------------------------------------------------
-# --- 1. CONFIGURATION ---
-# -----------------------------------------------------------------------------
+# Define EDA and BVP features
+eda_features = ['scl_mean', 'scl_std', 'phasic_mean', 'scr_count', 'scr_amp_mean', 'signal_quality']
+bvp_features = ['R-R_Intervals', 'SDNN', 'RMSSD', 'HR', 'pNN50', 'Poincare_SD1', 'Poincare_SD2']
 
-# EEG signal parameters
-SAMPLING_RATE = 500  # Hz; change if your data differs
-WINDOW_SECONDS = 60  # Duration of each window for feature calculation in seconds
+features = eda_features + bvp_features
+cols = ['SubjectID'] + features + ['Phase', 'Intervention']
+eda_features_length = len(eda_features) + 1
+bvp_features_length = len(bvp_features) + eda_features_length
 
-# Frequency band definitions
-BANDS = {
-    'alpha': (8, 13),
-    'beta': (13, 30)
-}
-
-# Channels of interest
-CHANNELS_OF_INTEREST = ['EEG.F3', 'EEG.F4']
-
-
-# -----------------------------------------------------------------------------
-# --- 2. FEATURE CALCULATION FUNCTIONS ---
-# -----------------------------------------------------------------------------
-
-def bandpass_filter(data, lowcut=1.0, highcut=50.0, fs=SAMPLING_RATE, order=5):
-    """Applies a Butterworth bandpass filter to the data."""
-    nyq = 0.5 * fs
-    low = lowcut / nyq
-    high = highcut / nyq
-    b, a = signal.butter(order, [low, high], btype='band')
-    y = signal.lfilter(b, a, data)
-    return y
-
-
-def calculate_band_power(data, fs=SAMPLING_RATE):
-    """Calculates the power in alpha and beta bands using Welch's method."""
-    win = fs * 2  # 2-second window
-    freqs, psd = signal.welch(data, fs, nperseg=win)
-
-    alpha_power = np.trapz(psd[(freqs >= BANDS['alpha'][0]) & (freqs <= BANDS['alpha'][1])])
-    beta_power = np.trapz(psd[(freqs >= BANDS['beta'][0]) & (freqs <= BANDS['beta'][1])])
-
-    return alpha_power, beta_power
-
-
-def extract_features_from_file(file_path, phase_name):
-    """
-    Extracts features from a single EEG file using a 60-second windowing approach.
-    Features are calculated for each window, then averaged across all windows.
-    """
-    try:
-        df = pd.read_csv(file_path)
-        if not all(ch in df.columns for ch in CHANNELS_OF_INTEREST):
-            print(f"  - Skipping {os.path.basename(file_path)}: Missing required channels.")
-            return None
-
-        if phase_name == 'baseline':
-            duration_seconds = 60
-        else:
-            duration_seconds = 240  # 4 minutes (control, intervention, test)
-
-        total_samples = int(duration_seconds * SAMPLING_RATE)
-
-        if len(df) < total_samples:
-            print(f"  - Warning in {os.path.basename(file_path)}: Not enough data for full duration. Using available data.")
-            total_samples = len(df)
-
-        data_f3 = df['EEG.F3'].iloc[:total_samples].to_numpy()
-        data_f4 = df['EEG.F4'].iloc[:total_samples].to_numpy()
-
-        window_samples = int(WINDOW_SECONDS * SAMPLING_RATE)
-        num_windows = total_samples // window_samples
-
-        if num_windows == 0:
-            print(f"  - Skipping {os.path.basename(file_path)}: Not enough data for a single {WINDOW_SECONDS}s window.")
-            return None
-
-        all_alpha_asymmetry, all_hfd_f3, all_hfd_f4, all_beta_alpha_f3, all_beta_alpha_f4 = [], [], [], [], []
-
-        for i in range(num_windows):
-            start_idx = i * window_samples
-            end_idx = start_idx + window_samples
-
-            win_f3 = data_f3[start_idx:end_idx]
-            win_f4 = data_f4[start_idx:end_idx]
-
-            filt_f3 = bandpass_filter(win_f3)
-            filt_f4 = bandpass_filter(win_f4)
-
-            alpha_f3, beta_f3 = calculate_band_power(filt_f3)
-            alpha_f4, beta_f4 = calculate_band_power(filt_f4)
-
-            ratio_f3 = beta_f3 / alpha_f3 if alpha_f3 > 0 else 0
-            ratio_f4 = beta_f4 / alpha_f4 if alpha_f4 > 0 else 0
-            all_beta_alpha_f3.append(ratio_f3)
-            all_beta_alpha_f4.append(ratio_f4)
-
-            asymmetry = np.log1p(alpha_f4) - np.log1p(alpha_f3) if alpha_f3 > 0 and alpha_f4 > 0 else 0
-            all_alpha_asymmetry.append(asymmetry)
-
-            hfd_f3 = ant.higuchi_fd(filt_f3)
-            hfd_f4 = ant.higuchi_fd(filt_f4)
-            all_hfd_f3.append(hfd_f3)
-            all_hfd_f4.append(hfd_f4)
-
-        features = {
-            'Alpha_Asymmetry': np.mean(all_alpha_asymmetry),
-            'HFD_F3': np.mean(all_hfd_f3),
-            'HFD_F4': np.mean(all_hfd_f4),
-            'Beta_Alpha_Ratio_F3': np.mean(all_beta_alpha_f3),
-            'Beta_Alpha_Ratio_F4': np.mean(all_beta_alpha_f4),
-        }
-        return features
-
-    except Exception as e:
-        print(f"  - Error processing file {file_path}: {e}")
-        return None
-
-
-# -----------------------------------------------------------------------------
-# --- 3. MAIN SCRIPT LOGIC ---
-# -----------------------------------------------------------------------------
 
 def get_paths():
     """Resolve project root and paths (aligned with transform.py)."""
     project_root = os.getenv('AIRFLOW_HOME', os.getcwd())
     base_etl = os.path.join(project_root, "etl")
-    base_path = os.path.join(base_etl, "phase_segmented")
+    root_dir = os.path.join(base_etl, "phase_segmented")
     output_dir = os.path.join(base_etl, "features_extracted")
-    output_filename = os.path.join(output_dir, "eeg_features_output.csv")
-    return project_root, base_path, output_dir, output_filename
+    output_file = os.path.join(output_dir, "feature_extracted.csv")
+    return project_root, root_dir, output_dir, output_file
 
 
-def run_feature_extraction(base_path=None, output_path=None):
-    """
-    Iterate through phase_segmented groups and subjects, extract EEG features.
-    If base_path or output_path are None, they are derived from project root.
-    """
-    project_root, default_base, output_dir, default_output = get_paths()
-    base_path = base_path or default_base
-    output_path = output_path or default_output
-    output_dir = os.path.dirname(output_path)
-    os.makedirs(output_dir, exist_ok=True)
+def get_subject_ids(path):
+    if os.path.exists(path):
+        return [d for d in os.listdir(path) if os.path.isdir(os.path.join(path, d))]
+    return []
 
-    # Pipeline uses Control, Raga, Breathing; normalize to lowercase for output
-    groups = ['Control', 'Raga', 'Breathing']
-    all_features_data = []
 
-    if not os.path.exists(base_path):
-        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-        print(f"!!! ERROR: base_path does not exist: {base_path}")
-        print("!!! Run transform_data first to produce phase_segmented data.")
-        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-        return None
-
-    print("Starting EEG feature extraction...")
-
-    for group in groups:
-        group_path = os.path.join(base_path, group)
-        if not os.path.isdir(group_path):
-            continue
-        subject_folders = sorted(
-            d for d in glob.glob(os.path.join(group_path, "*"))
-            if os.path.isdir(d)
-        )
-
-        print(f"\nProcessing Group: {group} ({len(subject_folders)} subjects found)")
-
-        for subject_path in subject_folders:
-            subject_id = os.path.basename(subject_path)
-            print(f"- Processing Subject: {subject_id}")
-
-            csv_files = glob.glob(os.path.join(subject_path, "*.csv"))
-
-            for file_path in csv_files:
-                file_name = os.path.basename(file_path)
-                phase_name = file_name.replace(".csv", "").lower()
-                if "setup" in phase_name:
-                    continue
-
-                features = extract_features_from_file(file_path, phase_name)
-
-                if features:
-                    result_row = {
-                        'SubjectID': subject_id,
-                        'Phase': phase_name.split('_')[-1],
-                        'Group': group.lower(),
-                        **features
-                    }
-                    all_features_data.append(result_row)
-
-    if not all_features_data:
-        print("\nNo features extracted (no EEG files with required channels found).")
-        return None
-
-    output_df = pd.DataFrame(all_features_data)
-
+def extract_eda_features(eda_signal: np.ndarray, sampling_rate: int = 64):
+    if not isinstance(eda_signal, np.ndarray):
+        raise ValueError("Input must be a numpy array")
+    if len(eda_signal) <= 15:
+        return [np.nan] * 6
     try:
-        output_df.to_csv(output_path, index=False)
-        print(f"\n✅ Success! All features saved to '{output_path}'")
-        return output_path
+        eda_normalized = (eda_signal - np.mean(eda_signal)) / np.std(eda_signal)
+        signals, info = nk.eda_process(eda_normalized, sampling_rate=sampling_rate)
+        eda_tonic = signals["EDA_Tonic"]
+        eda_phasic = signals["EDA_Phasic"]
+        scr_amps = info["SCR_Amplitude"]
+        scr_count = len(info["SCR_Peaks"]) if info["SCR_Peaks"] is not None else 0
+        eda_features_dict = {
+            'scl_mean': np.mean(eda_tonic),
+            'scl_std': np.std(eda_tonic),
+            'phasic_mean': np.mean(eda_phasic),
+            'scr_count': scr_count,
+            'scr_amp_mean': np.mean(scr_amps) if scr_count > 0 else 0,
+            'signal_quality': np.var(eda_normalized),
+        }
+        return list(eda_features_dict.values())
     except Exception as e:
-        print(f"\n❌ Error saving file: {e}")
+        raise RuntimeError(f"Processing failed: {str(e)}")
+
+
+def normalize_bvp(bvp_signal: np.ndarray):
+    baseline = np.median(bvp_signal)
+    corrected = bvp_signal - baseline
+    return (corrected - np.min(corrected)) / (np.max(corrected) - np.min(corrected) + 1e-8)
+
+
+def extract_bvp_features(bvp_signal: np.ndarray, sampling_rate: int = 64):
+    if not isinstance(bvp_signal, np.ndarray):
+        raise ValueError("Input must be a numpy array")
+    if len(bvp_signal) < 100:
+        return [np.nan] * 7
+    try:
+        bvp_normalized = normalize_bvp(bvp_signal)
+        bvp_cleaned = nk.ppg_clean(bvp_normalized, sampling_rate=sampling_rate)
+        info = nk.ppg_findpeaks(bvp_cleaned, sampling_rate=sampling_rate)
+        peaks = info["PPG_Peaks"]
+        rri = np.diff(peaks) / sampling_rate
+        if len(rri) < 2:
+            return [np.nan] * 7
+        sdnn = np.nanstd(rri, ddof=1)
+        rmssd = np.sqrt(np.mean(np.diff(rri) ** 2))
+        hr = 60 / np.mean(rri)
+        diff_rri = np.abs(np.diff(rri))
+        pnn50 = np.sum(diff_rri > 0.05) / len(diff_rri) * 100
+        rri_n = rri[:-1]
+        rri_plus = rri[1:]
+        sd1 = np.std((rri_n - rri_plus) / np.sqrt(2), ddof=1)
+        sd2 = np.std((rri_n + rri_plus) / np.sqrt(2), ddof=1)
+        # Store scalar for R-R (mean) so DataFrame row is valid
+        bvp_features_list = [
+            np.mean(rri),
+            sdnn,
+            rmssd,
+            hr,
+            pnn50,
+            sd1,
+            sd2,
+        ]
+        return bvp_features_list
+    except Exception as e:
+        raise RuntimeError(f"BVP processing error: {str(e)}")
+
+
+def extract_features(folder_path, subject_id, control_subjects, breathing_subjects, raga_subjects, features_df):
+    if subject_id in control_subjects:
+        intervention = 'Control'
+    elif subject_id in breathing_subjects:
+        intervention = 'Breathing'
+    elif subject_id in raga_subjects:
+        intervention = 'Raga'
+    else:
+        intervention = 'Unknown'
+
+    print("Processing : " + subject_id)
+    for filename in os.listdir(folder_path):
+        if filename.endswith('.csv') and (filename.startswith('eda_') or filename.startswith('bvp_')):
+            file_path = os.path.join(folder_path, filename)
+            condition = None
+            if 'baseline' in filename:
+                condition = 'baseline'
+            elif 'intervention' in filename:
+                condition = 'intervention'
+            elif 'test' in filename:
+                condition = 'test'
+            elif 'rest' in filename:
+                condition = 'rest'
+
+            if condition is not None:
+                df = pd.read_csv(file_path)
+                row = [subject_id] + [np.nan] * len(features) + [condition] + [intervention]
+
+                if filename.startswith('eda_'):
+                    eda_signal = df['eda'].values
+                    eda_features_values = extract_eda_features(eda_signal)
+                    row[1:eda_features_length] = eda_features_values
+                elif filename.startswith('bvp_'):
+                    bvp_signal = df['bvp'].values
+                    bvp_features_values = extract_bvp_features(bvp_signal)
+                    row[eda_features_length:bvp_features_length] = bvp_features_values
+
+                features_df.loc[len(features_df)] = row.copy()
+
+
+def run_feature_extraction(root_dir=None, output_path=None):
+    """
+    Iterate through phase_segmented groups and subjects, extract EDA/BVP features.
+    """
+    project_root, default_root, output_dir, default_output = get_paths()
+    root_dir = root_dir or default_root
+    output_path = output_path or default_output
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+    control_path = os.path.join(root_dir, 'Control')
+    breathing_path = os.path.join(root_dir, 'Breathing')
+    raga_path = os.path.join(root_dir, 'Raga')
+
+    control_subjects = get_subject_ids(control_path)
+    breathing_subjects = get_subject_ids(breathing_path)
+    raga_subjects = get_subject_ids(raga_path)
+
+    print(f"Detected Control Subjects: {control_subjects}")
+    print(f"Detected Breathing Subjects: {breathing_subjects}")
+    print(f"Detected Raga Subjects: {raga_subjects}")
+
+    features_df = pd.DataFrame(columns=cols)
+
+    for parent_dir in [control_path, breathing_path, raga_path]:
+        if not os.path.exists(parent_dir):
+            print(f"Skipping missing path: {parent_dir}")
+            continue
+        for folder in os.listdir(parent_dir):
+            folder_path = os.path.join(parent_dir, folder)
+            if os.path.isdir(folder_path):
+                try:
+                    extract_features(
+                        folder_path, folder,
+                        control_subjects, breathing_subjects, raga_subjects,
+                        features_df
+                    )
+                except Exception as e:
+                    print(f"Error processing subject {folder}: {e}")
+
+    if features_df.empty:
+        print("No features extracted.")
         return None
+
+    features_df.to_csv(output_path, index=False)
+    print(f"Features saved to {output_path}")
+    return output_path
 
 
 def main():
-    """Entry point for standalone or DAG usage."""
     run_feature_extraction()
 
 
 if __name__ == "__main__":
     main()
+
