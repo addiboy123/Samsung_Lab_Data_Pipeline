@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from pydrive2.auth import GoogleAuth
 from pydrive2.drive import GoogleDrive
 
@@ -64,10 +65,16 @@ class GDriveUploader:
 def upload_to_gdrive():
     project_root = os.getenv('AIRFLOW_HOME', os.getcwd())
     
+    # Get today's date for features and plots
+    today_date = datetime.now().strftime("%Y-%m-%d")
+    
     # Define your folders using the IDs (not URLs) from your previous steps
+    # Note: features_extracted and plots are stored in dated subdirectories
     TARGET_DRIVE_IDS = {
         os.path.join(project_root, "etl/organized_data"): "1eNLj2mImpRbZhbCpwW2A_L9xVVcY_wuw",
-        os.path.join(project_root, "etl/phase_segmented"): "12B0c6yaGuABtpXX4ezFU9EcxPKmo1pqF"
+        os.path.join(project_root, "etl/phase_segmented"): "12B0c6yaGuABtpXX4ezFU9EcxPKmo1pqF",
+        os.path.join(project_root, "etl/features_extracted"): "1nRegir8GcKg_LwCld0irH2pkUhqzLiuF",  # Replace with actual ID
+        os.path.join(project_root, "etl/plots"): "1lEXM0I5A5GWrwEhbDG-2YPZMOcqcLIkL"  # Replace with actual ID
     }
 
     uploader = GDriveUploader()
@@ -76,6 +83,8 @@ def upload_to_gdrive():
         if os.path.exists(local_path):
             print(f"\n--- Syncing {local_path} ---")
             uploader.upload_recursive(local_path, drive_id)
+        else:
+            print(f"\n⚠️  Skipping {local_path} (directory not found)")
 
     print("\n--- Google Drive Sync Completed Successfully ---")
 
