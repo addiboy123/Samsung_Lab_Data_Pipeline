@@ -10,3 +10,4 @@ logs/
 *.pid
 scheduler.log
 mycreds.txt
+tokens.db

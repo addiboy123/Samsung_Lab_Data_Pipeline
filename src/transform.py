@@ -69,9 +69,9 @@ def transform_data():
     # --- STEP 2: Phase Segmentation ---
     # The rules (ratios) are still logic-based, but applied to groups found in CSV
     segment_rules = {
-        'Control': (['baseline', 'test'], [1,5]),
-        'Breathing': (['baseline', 'intervention', 'test'], [1, 5, 5]),
-        'Raga': (['baseline', 'intervention', 'test'], [1, 5, 5])
+        'Control': (['baseline', 'test'], [1,1]),
+        'Breathing': (['baseline', 'intervention', 'test'], [1, 1, 1]),
+        'Raga': (['baseline', 'intervention', 'test'], [1, 1, 1])
     }
 
     for group, (exts, ratios) in segment_rules.items():
