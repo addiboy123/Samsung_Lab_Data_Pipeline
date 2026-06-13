@@ -73,7 +73,7 @@ def upload_to_gdrive():
     TARGET_DRIVE_IDS = {
         os.path.join(project_root, "etl/organized_data"): "1QmZp19lQ8E1i02djUpY6DLCd4IBz4I7i",
         os.path.join(project_root, "etl/phase_segmented"): "1N8hSTbCT5n9VTm1ssyEocX0klj92zK_N",
-        os.path.join(project_root, "etl`/features_extracted"): "11b4J9Dms8QrEl8dYOt-THNToJOfkLQoO",  # Replace with actual ID
+        os.path.join(project_root, "etl/features_extracted"): "11b4J9Dms8QrEl8dYOt-THNToJOfkLQoO",  # Replace with actual ID
         os.path.join(project_root, "etl/plots"): "14KivnKvmcjjqxOoGADFOLKFtQjIlzysV"  # Replace with actual ID
     }
 
