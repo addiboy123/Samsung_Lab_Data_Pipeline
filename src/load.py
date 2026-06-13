@@ -71,10 +71,10 @@ def upload_to_gdrive():
     # Define your folders using the IDs (not URLs) from your previous steps
     # Note: features_extracted and plots are stored in dated subdirectories
     TARGET_DRIVE_IDS = {
-        os.path.join(project_root, "etl/organized_data"): "1eNLj2mImpRbZhbCpwW2A_L9xVVcY_wuw",
-        os.path.join(project_root, "etl/phase_segmented"): "12B0c6yaGuABtpXX4ezFU9EcxPKmo1pqF",
-        os.path.join(project_root, "etl/features_extracted"): "1nRegir8GcKg_LwCld0irH2pkUhqzLiuF",  # Replace with actual ID
-        os.path.join(project_root, "etl/plots"): "1lEXM0I5A5GWrwEhbDG-2YPZMOcqcLIkL"  # Replace with actual ID
+        os.path.join(project_root, "etl/organized_data"): "1QmZp19lQ8E1i02djUpY6DLCd4IBz4I7i",
+        os.path.join(project_root, "etl/phase_segmented"): "1N8hSTbCT5n9VTm1ssyEocX0klj92zK_N",
+        os.path.join(project_root, "etl`/features_extracted"): "11b4J9Dms8QrEl8dYOt-THNToJOfkLQoO",  # Replace with actual ID
+        os.path.join(project_root, "etl/plots"): "14KivnKvmcjjqxOoGADFOLKFtQjIlzysV"  # Replace with actual ID
     }
 
     uploader = GDriveUploader()
